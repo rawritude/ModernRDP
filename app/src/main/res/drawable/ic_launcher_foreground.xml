@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Monitor outline -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M30,30h48v32H30z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M33,33h42v26H33z" />
+    <!-- Stand -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M48,62h12v4H48zM44,66h20v3H44z" />
+    <!-- Signal lines -->
+    <path
+        android:strokeColor="#42A5F5"
+        android:strokeWidth="2"
+        android:pathData="M70,40 L78,36M70,46 L78,46M70,52 L78,56"
+        android:fillColor="#00000000" />
+</vector>
