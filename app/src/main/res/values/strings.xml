@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ModernRDP</string>
+    <string name="connections">Connections</string>
+    <string name="new_connection">New Connection</string>
+    <string name="edit_connection">Edit Connection</string>
+    <string name="connect">Connect</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="hostname">Hostname or IP</string>
+    <string name="port">Port</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="domain">Domain</string>
+    <string name="connection_name">Connection Name</string>
+    <string name="display_settings">Display</string>
+    <string name="resolution">Resolution</string>
+    <string name="match_device">Match Device Screen</string>
+    <string name="custom_resolution">Custom Resolution</string>
+    <string name="color_depth">Color Depth</string>
+    <string name="settings">Settings</string>
+    <string name="no_connections">No connections yet</string>
+    <string name="no_connections_hint">Tap + to add your first remote desktop connection</string>
+    <string name="connecting">Connecting…</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="connection_failed">Connection failed</string>
+</resources>
