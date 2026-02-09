@@ -333,6 +333,23 @@ fun ConnectionEditorScreen(
                 visualTransformation = PasswordVisualTransformation(),
             )
 
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // --- Wake-on-LAN ---
+            SectionHeader("Wake-on-LAN (optional)")
+
+            OutlinedTextField(
+                value = state.macAddress,
+                onValueChange = viewModel::updateMacAddress,
+                label = { Text("MAC Address") },
+                placeholder = { Text("AA:BB:CC:DD:EE:FF") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            )
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }

@@ -9,11 +9,13 @@ import androidx.navigation.navArgument
 import com.modernrdp.ui.screens.editor.ConnectionEditorScreen
 import com.modernrdp.ui.screens.home.HomeScreen
 import com.modernrdp.ui.screens.session.SessionScreen
+import com.modernrdp.ui.screens.settings.SettingsScreen
 
 object Routes {
     const val HOME = "home"
     const val EDITOR = "editor?connectionId={connectionId}"
     const val SESSION = "session/{connectionId}"
+    const val SETTINGS = "settings"
 
     fun editor(connectionId: Long? = null): String =
         if (connectionId != null) "editor?connectionId=$connectionId" else "editor"
@@ -29,6 +31,8 @@ fun ModernRdpNavGraph(navController: NavHostController) {
                 onAddConnection = { navController.navigate(Routes.editor()) },
                 onEditConnection = { id -> navController.navigate(Routes.editor(id)) },
                 onConnect = { id -> navController.navigate(Routes.session(id)) },
+                onSettings = { navController.navigate(Routes.SETTINGS) },
+                onQuickConnect = { id -> navController.navigate(Routes.session(id)) },
             )
         }
 
@@ -59,6 +63,12 @@ fun ModernRdpNavGraph(navController: NavHostController) {
             SessionScreen(
                 connectionId = connectionId,
                 onDisconnected = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
             )
         }
     }

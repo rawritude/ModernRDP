@@ -20,6 +20,15 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections WHERE groupId IS NULL ORDER BY lastConnected DESC, createdAt DESC")
     fun getUngroupedConnections(): Flow<List<RdpConnection>>
 
+    @Query(
+        """SELECT * FROM connections
+           WHERE name LIKE '%' || :query || '%'
+              OR hostname LIKE '%' || :query || '%'
+              OR username LIKE '%' || :query || '%'
+           ORDER BY lastConnected DESC, createdAt DESC"""
+    )
+    fun searchConnections(query: String): Flow<List<RdpConnection>>
+
     @Query("SELECT * FROM connections WHERE id = :id")
     suspend fun getConnectionById(id: Long): RdpConnection?
 

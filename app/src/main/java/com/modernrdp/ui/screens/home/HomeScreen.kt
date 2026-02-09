@@ -15,29 +15,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,94 +67,174 @@ fun HomeScreen(
     onAddConnection: () -> Unit,
     onEditConnection: (Long) -> Unit,
     onConnect: (Long) -> Unit,
+    onSettings: () -> Unit = {},
+    onQuickConnect: (Long) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val groupedConnections by viewModel.groupedConnections.collectAsStateWithLifecycle()
     val showGroupDialog by viewModel.showGroupDialog.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+    val activeSessions by viewModel.activeSessions.collectAsStateWithLifecycle()
 
-    val allEmpty = groupedConnections.all { it.connections.isEmpty() }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var isSearching by remember { mutableStateOf(false) }
+    var showQuickConnectDialog by remember { mutableStateOf(false) }
 
     if (showGroupDialog) {
         CreateGroupDialog(
             onDismiss = viewModel::dismissGroupDialog,
-            onCreate = viewModel::createGroup,
+            onConfirm = viewModel::createGroup,
+        )
+    }
+
+    if (showQuickConnectDialog) {
+        QuickConnectDialog(
+            onDismiss = { showQuickConnectDialog = false },
+            onConnect = { hostname, port, username, password ->
+                showQuickConnectDialog = false
+                viewModel.quickConnect(hostname, port, username, password) { id ->
+                    onQuickConnect(id)
+                }
+            },
         )
     }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            HomeTopBar(
+            MediumTopAppBar(
+                title = {
+                    if (isSearching) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = viewModel::setSearchQuery,
+                            placeholder = { Text("Search connections...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {}),
+                        )
+                    } else {
+                        Text("ModernRDP")
+                    }
+                },
+                actions = {
+                    if (isSearching) {
+                        IconButton(onClick = {
+                            isSearching = false
+                            viewModel.setSearchQuery("")
+                        }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close search")
+                        }
+                    } else {
+                        IconButton(onClick = { isSearching = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
+                        IconButton(onClick = { showQuickConnectDialog = true }) {
+                            Icon(Icons.Default.Link, contentDescription = "Quick Connect")
+                        }
+                        IconButton(onClick = viewModel::showCreateGroupDialog) {
+                            Icon(Icons.Default.CreateNewFolder, contentDescription = "New Group")
+                        }
+                        IconButton(onClick = onSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    }
+                },
                 scrollBehavior = scrollBehavior,
-                onCreateGroup = viewModel::showCreateGroupDialog,
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAddConnection,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New Connection") },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+            FloatingActionButton(onClick = onAddConnection) {
+                Icon(Icons.Default.Add, contentDescription = "Add Connection")
+            }
         },
     ) { innerPadding ->
-        AnimatedVisibility(
-            visible = allEmpty,
-            enter = fadeIn(),
-            exit = fadeOut(),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
         ) {
-            EmptyState(modifier = Modifier.padding(innerPadding))
-        }
+            // Active sessions indicator
+            if (activeSessions.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    activeSessions.forEach { (id, session) ->
+                        AssistChip(
+                            onClick = { onConnect(id) },
+                            label = { Text(session.hostname, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            leadingIcon = { Icon(Icons.Default.Computer, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        )
+                    }
+                }
+            }
 
-        AnimatedVisibility(
-            visible = !allEmpty,
-            enter = fadeIn(),
-            exit = fadeOut(),
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding() + 8.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 88.dp,
-                    start = 16.dp,
-                    end = 16.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                for (grouped in groupedConnections) {
-                    // Group header (skip for ungrouped when it's the only section)
-                    if (grouped.group != null || groupedConnections.size > 1) {
-                        item(key = "group_${grouped.group?.id}") {
-                            GroupHeader(
-                                name = grouped.group?.name ?: "Ungrouped",
-                                connectionCount = grouped.connections.size,
-                                isExpanded = grouped.isExpanded,
-                                onToggle = { viewModel.toggleGroupExpanded(grouped.group?.id) },
-                            )
+            if (isSearching && searchQuery.isNotBlank()) {
+                // Show search results
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(searchResults, key = { it.id }) { connection ->
+                        ConnectionCard(
+                            connection = connection,
+                            onConnect = {
+                                viewModel.markConnected(connection.id)
+                                onConnect(connection.id)
+                            },
+                            onEdit = { onEditConnection(connection.id) },
+                        )
+                    }
+                }
+            } else {
+                // Show grouped connections
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    groupedConnections.forEach { grouped ->
+                        // Group header
+                        if (grouped.group != null) {
+                            item(key = "group_${grouped.group.id}") {
+                                GroupHeader(
+                                    name = grouped.group.name,
+                                    count = grouped.connections.size,
+                                    isExpanded = grouped.isExpanded,
+                                    onToggle = { viewModel.toggleGroupExpanded(grouped.group.id) },
+                                    onDelete = { viewModel.deleteGroup(grouped.group) },
+                                )
+                            }
+                        }
+
+                        // Connections in this group
+                        if (grouped.isExpanded) {
+                            items(grouped.connections, key = { it.id }) { connection ->
+                                ConnectionCard(
+                                    connection = connection,
+                                    onConnect = {
+                                        viewModel.markConnected(connection.id)
+                                        onConnect(connection.id)
+                                    },
+                                    onEdit = { onEditConnection(connection.id) },
+                                    modifier = if (grouped.group != null) {
+                                        Modifier.padding(start = 8.dp)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                            }
                         }
                     }
 
-                    // Connections in this group
-                    if (grouped.isExpanded) {
-                        items(
-                            items = grouped.connections,
-                            key = { it.id },
-                        ) { connection ->
-                            ConnectionCard(
-                                connection = connection,
-                                onConnect = {
-                                    viewModel.markConnected(connection.id)
-                                    onConnect(connection.id)
-                                },
-                                onEdit = { onEditConnection(connection.id) },
-                                modifier = Modifier
-                                    .animateItem()
-                                    .padding(
-                                        start = if (grouped.group != null) 8.dp else 0.dp,
-                                    ),
-                            )
+                    // Empty state
+                    if (groupedConnections.all { it.connections.isEmpty() }) {
+                        item {
+                            EmptyState()
                         }
                     }
                 }
@@ -156,125 +246,157 @@ fun HomeScreen(
 @Composable
 private fun GroupHeader(
     name: String,
-    connectionCount: Int,
+    count: Int,
     isExpanded: Boolean,
     onToggle: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onToggle)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = Icons.Default.Folder,
+            Icons.Default.Folder,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp),
         )
-        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = name,
             style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            text = "$connectionCount",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        BadgedBox(badge = { Badge { Text("$count") } }) {}
+        Spacer(modifier = Modifier.width(8.dp))
         Icon(
-            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
             contentDescription = if (isExpanded) "Collapse" else "Expand",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+@Composable
+private fun EmptyState() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Default.Computer,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "No connections yet",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "Tap + to add a server",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
     }
 }
 
 @Composable
 private fun CreateGroupDialog(
     onDismiss: () -> Unit,
-    onCreate: (String) -> Unit,
+    onConfirm: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Group") },
+        title = { Text("Create Group") },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Group Name") },
-                placeholder = { Text("Production Servers") },
+                label = { Text("Group name") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
         },
         confirmButton = {
-            TextButton(
-                onClick = { if (name.isNotBlank()) onCreate(name.trim()) },
-                enabled = name.isNotBlank(),
-            ) {
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name) }) {
                 Text("Create")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeTopBar(
-    scrollBehavior: TopAppBarScrollBehavior,
-    onCreateGroup: () -> Unit,
+private fun QuickConnectDialog(
+    onDismiss: () -> Unit,
+    onConnect: (hostname: String, port: Int, username: String, password: String) -> Unit,
 ) {
-    LargeTopAppBar(
-        title = { Text("ModernRDP") },
-        actions = {
-            IconButton(onClick = onCreateGroup) {
-                Icon(Icons.Default.CreateNewFolder, contentDescription = "New Group")
-            }
-            IconButton(onClick = { /* TODO: Settings */ }) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings")
+    var hostname by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf("3389") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Quick Connect") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = hostname,
+                    onValueChange = { hostname = it },
+                    label = { Text("Hostname") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = port,
+                    onValueChange = { port = it },
+                    label = { Text("Port") },
+                    singleLine = true,
+                    modifier = Modifier.width(120.dp),
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
-        scrollBehavior = scrollBehavior,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (hostname.isNotBlank()) {
+                        onConnect(hostname, port.toIntOrNull() ?: 3389, username, password)
+                    }
+                },
+            ) {
+                Text("Connect")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
     )
-}
-
-@Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Default.Laptop,
-                contentDescription = null,
-                modifier = Modifier.size(72.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "No connections yet",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Tap + to add your first remote desktop",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            )
-        }
-    }
 }

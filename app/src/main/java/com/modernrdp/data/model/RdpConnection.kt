@@ -44,6 +44,8 @@ data class RdpConnection(
     val gatewayPassword: String = "", // Stored encrypted
     // Group
     val groupId: Long? = null,
+    // Wake-on-LAN
+    val macAddress: String = "",
     // Metadata
     val lastConnected: Long = 0,
     val createdAt: Long = System.currentTimeMillis(),

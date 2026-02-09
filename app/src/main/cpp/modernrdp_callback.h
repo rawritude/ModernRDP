@@ -27,4 +27,20 @@ jboolean mrdp_callback_bool(const char* method_name, const char* signature, ...)
  */
 jint mrdp_callback_int(const char* method_name, const char* signature, ...);
 
+/**
+ * Get a JNIEnv for the current thread, attaching if necessary.
+ * The 'attached' flag must be passed to mrdp_release_env() after use.
+ */
+JNIEnv* mrdp_get_env(BOOL* attached);
+
+/**
+ * Release a JNIEnv obtained via mrdp_get_env().
+ */
+void mrdp_release_env(BOOL attached);
+
+/**
+ * Get the cached FreeRdpBridge class reference.
+ */
+jclass mrdp_get_bridge_class(void);
+
 #endif /* MODERNRDP_CALLBACK_H */

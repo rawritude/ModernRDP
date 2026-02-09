@@ -25,9 +25,15 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `connections` ADD COLUMN `macAddress` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 @Database(
     entities = [RdpConnection::class, ConnectionGroup::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class RdpDatabase : RoomDatabase() {

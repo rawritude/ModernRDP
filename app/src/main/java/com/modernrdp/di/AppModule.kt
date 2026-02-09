@@ -5,7 +5,9 @@ import androidx.room.Room
 import com.modernrdp.data.local.ConnectionDao
 import com.modernrdp.data.local.GroupDao
 import com.modernrdp.data.local.MIGRATION_1_2
+import com.modernrdp.data.local.MIGRATION_2_3
 import com.modernrdp.data.local.RdpDatabase
+import com.modernrdp.data.preferences.AppPreferences
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +27,7 @@ object AppModule {
             RdpDatabase::class.java,
             "modernrdp.db",
         )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
 
     @Provides
@@ -37,4 +39,9 @@ object AppModule {
     @Singleton
     fun provideGroupDao(database: RdpDatabase): GroupDao =
         database.groupDao()
+
+    @Provides
+    @Singleton
+    fun provideAppPreferences(@ApplicationContext context: Context): AppPreferences =
+        AppPreferences(context)
 }

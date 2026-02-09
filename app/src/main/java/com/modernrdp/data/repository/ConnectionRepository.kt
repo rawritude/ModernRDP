@@ -28,6 +28,9 @@ class ConnectionRepository @Inject constructor(
     fun getUngroupedConnections(): Flow<List<RdpConnection>> =
         connectionDao.getUngroupedConnections().map { list -> list.map { decryptConnection(it) } }
 
+    fun searchConnections(query: String): Flow<List<RdpConnection>> =
+        connectionDao.searchConnections(query).map { list -> list.map { decryptConnection(it) } }
+
     suspend fun getConnectionById(id: Long): RdpConnection? =
         connectionDao.getConnectionById(id)?.let { decryptConnection(it) }
 

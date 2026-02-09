@@ -109,6 +109,9 @@ dependencies {
     // DataStore (preferences)
     implementation(libs.androidx.datastore.preferences)
 
+    // Biometric
+    implementation(libs.androidx.biometric)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 }

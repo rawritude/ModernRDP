@@ -114,6 +114,54 @@ static BOOL mrdp_desktop_resize(rdpContext* context)
 }
 
 /* ================================================================
+ * Certificate Verification — blocks RDP thread until user responds
+ * ================================================================ */
+
+static DWORD mrdp_verify_certificate_ex(freerdp* instance, const char* host, UINT16 port,
+                                          const char* common_name, const char* subject,
+                                          const char* issuer, const char* fingerprint,
+                                          DWORD flags)
+{
+    LOGI("Certificate verification for %s:%u (flags=0x%08x)", host, port, flags);
+
+    BOOL attached;
+    JNIEnv* env = mrdp_get_env(&attached);
+    if (!env) return 0;
+
+    jclass cls = mrdp_get_bridge_class();
+    jmethodID mid = (*env)->GetStaticMethodID(env, cls, "onNativeVerifyCertificate",
+        "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)I");
+    if (!mid) {
+        LOGE("onNativeVerifyCertificate method not found");
+        mrdp_release_env(attached);
+        return 0;
+    }
+
+    jstring jHost = host ? (*env)->NewStringUTF(env, host) : (*env)->NewStringUTF(env, "");
+    jstring jSubject = subject ? (*env)->NewStringUTF(env, subject) : (*env)->NewStringUTF(env, "");
+    jstring jIssuer = issuer ? (*env)->NewStringUTF(env, issuer) : (*env)->NewStringUTF(env, "");
+    jstring jFingerprint = fingerprint ? (*env)->NewStringUTF(env, fingerprint) : (*env)->NewStringUTF(env, "");
+    jboolean jMismatch = (flags & VERIFY_CERT_FLAG_MISMATCH) ? JNI_TRUE : JNI_FALSE;
+
+    jint result = (*env)->CallStaticIntMethod(env, cls, mid,
+        (jlong)instance, jHost, jSubject, jIssuer, jFingerprint, jMismatch);
+
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionDescribe(env);
+        (*env)->ExceptionClear(env);
+        result = 0;
+    }
+
+    (*env)->DeleteLocalRef(env, jHost);
+    (*env)->DeleteLocalRef(env, jSubject);
+    (*env)->DeleteLocalRef(env, jIssuer);
+    (*env)->DeleteLocalRef(env, jFingerprint);
+
+    mrdp_release_env(attached);
+    return (DWORD)result;
+}
+
+/* ================================================================
  * Pre/Post Connect — FreeRDP session lifecycle hooks
  * ================================================================ */
 
@@ -132,6 +180,9 @@ static BOOL mrdp_pre_connect(freerdp* instance)
     /* Enable unicode keyboard mapping for better Android input handling */
     if (!freerdp_settings_set_bool(settings, FreeRDP_UnicodeInput, TRUE))
         return FALSE;
+
+    /* Set certificate verification callback */
+    instance->VerifyCertificateEx = mrdp_verify_certificate_ex;
 
     mrdp_callback("onNativePreConnect", "(J)V", (jlong)instance);
     return TRUE;
@@ -718,4 +769,33 @@ Java_com_modernrdp_rdp_FreeRdpBridge_nativeGetLastError(JNIEnv* env, jobject thi
     UINT32 error = freerdp_get_last_error(inst->context);
     const char* error_str = freerdp_get_last_error_string(error);
     return (*env)->NewStringUTF(env, error_str ? error_str : "Unknown error");
+}
+
+/*
+ * Request a display resize via the display control channel.
+ * Updates FreeRDP settings for the new resolution.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_modernrdp_rdp_FreeRdpBridge_nativeSendResizeEvent(JNIEnv* env, jobject thiz,
+                                                            jlong instance,
+                                                            jint width, jint height)
+{
+    freerdp* inst = (freerdp*)instance;
+    if (!inst || width <= 0 || height <= 0)
+        return JNI_FALSE;
+
+    rdpSettings* settings = inst->context->settings;
+
+    LOGI("Resize requested: %dx%d", width, height);
+
+    /* Update the settings — if the display control channel is active,
+     * FreeRDP will negotiate the resize with the server. */
+    freerdp_settings_set_uint32(settings, FreeRDP_DesktopWidth, (UINT32)width);
+    freerdp_settings_set_uint32(settings, FreeRDP_DesktopHeight, (UINT32)height);
+
+    /* Signal FreeRDP display update if supported */
+    if (inst->context->update && inst->context->update->DesktopResize)
+        inst->context->update->DesktopResize(inst->context);
+
+    return JNI_TRUE;
 }

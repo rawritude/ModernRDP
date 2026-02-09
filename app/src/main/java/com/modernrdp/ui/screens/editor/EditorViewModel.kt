@@ -56,6 +56,7 @@ class EditorViewModel @Inject constructor(
                         gatewayPort = conn.gatewayPort.toString(),
                         gatewayUsername = conn.gatewayUsername,
                         gatewayPassword = conn.gatewayPassword,
+                        macAddress = conn.macAddress,
                     )
                 }
             }
@@ -81,6 +82,7 @@ class EditorViewModel @Inject constructor(
     fun updateGatewayPort(value: String) = _state.update { it.copy(gatewayPort = value) }
     fun updateGatewayUsername(value: String) = _state.update { it.copy(gatewayUsername = value) }
     fun updateGatewayPassword(value: String) = _state.update { it.copy(gatewayPassword = value) }
+    fun updateMacAddress(value: String) = _state.update { it.copy(macAddress = value) }
 
     fun save(onComplete: () -> Unit) {
         val s = _state.value
@@ -111,6 +113,7 @@ class EditorViewModel @Inject constructor(
                 gatewayPort = s.gatewayPort.toIntOrNull() ?: 443,
                 gatewayUsername = s.gatewayUsername,
                 gatewayPassword = s.gatewayPassword,
+                macAddress = s.macAddress.trim(),
             )
             repository.saveConnection(connection)
             onComplete()
@@ -149,4 +152,5 @@ data class EditorState(
     val gatewayPort: String = "443",
     val gatewayUsername: String = "",
     val gatewayPassword: String = "",
+    val macAddress: String = "",
 )

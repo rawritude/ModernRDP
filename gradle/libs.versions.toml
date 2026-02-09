@@ -15,6 +15,7 @@ room = "2.6.1"
 datastore = "1.1.1"
 coroutines = "1.9.0"
 material3Adaptive = "1.1.0"
+biometric = "1.1.0"
 
 [libraries]
 # Core
@@ -60,6 +61,9 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 
 # DataStore (preferences)
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+
+# Biometric
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }

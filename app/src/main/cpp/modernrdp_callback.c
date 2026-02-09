@@ -178,3 +178,21 @@ jint mrdp_callback_int(const char* method_name, const char* signature, ...)
     release_env(attached);
     return result;
 }
+
+JNIEnv* mrdp_get_env(BOOL* attached)
+{
+    JNIEnv* env;
+    if (!get_env(&env, attached))
+        return NULL;
+    return env;
+}
+
+void mrdp_release_env(BOOL attached)
+{
+    release_env(attached);
+}
+
+jclass mrdp_get_bridge_class(void)
+{
+    return g_bridge_class;
+}

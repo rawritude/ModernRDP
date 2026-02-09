@@ -15,15 +15,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.ZoomIn
-import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -32,6 +35,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,17 +45,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.modernrdp.rdp.CertificateInfo
 import com.modernrdp.rdp.FreeRdpBridge
 import com.modernrdp.rdp.SessionState
 
@@ -62,36 +74,35 @@ fun SessionScreen(
     viewModel: SessionViewModel = hiltViewModel(),
 ) {
     val sessionState by viewModel.sessionState.collectAsStateWithLifecycle()
-    val framebuffer by viewModel.framebuffer.collectAsStateWithLifecycle()
     val connection by viewModel.connection.collectAsStateWithLifecycle()
     val toolbarVisible by viewModel.toolbarVisible.collectAsStateWithLifecycle()
+    val pendingCert by viewModel.pendingCertificate.collectAsStateWithLifecycle()
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
 
-    // Compute screen dimensions in pixels
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
-    // Auto-connect when connection data loads
     LaunchedEffect(connection) {
         if (connection != null && sessionState == SessionState.DISCONNECTED) {
             viewModel.connect(screenWidthPx, screenHeightPx)
         }
     }
 
-    // Handle screen size changes (fold/unfold)
     LaunchedEffect(screenWidthPx, screenHeightPx) {
         if (sessionState == SessionState.CONNECTED) {
             viewModel.onScreenResize(screenWidthPx, screenHeightPx)
         }
     }
 
-    // Navigate back when disconnected after being connected
-    LaunchedEffect(sessionState) {
-        if (sessionState == SessionState.DISCONNECTED && connection != null) {
-            // Only navigate back if we were previously connected
-        }
+    // Certificate verification dialog
+    pendingCert?.let { cert ->
+        CertificateDialog(
+            certInfo = cert,
+            onAccept = { viewModel.respondToCertificate(true) },
+            onReject = { viewModel.respondToCertificate(false) },
+        )
     }
 
     Box(
@@ -100,9 +111,7 @@ fun SessionScreen(
             .background(Color.Black),
     ) {
         when (sessionState) {
-            SessionState.CONNECTING -> ConnectingOverlay(
-                hostname = connection?.hostname ?: "",
-            )
+            SessionState.CONNECTING -> ConnectingOverlay(hostname = connection?.hostname ?: "")
             SessionState.CONNECTED -> RdpCanvas(
                 viewModel = viewModel,
                 onToggleToolbar = viewModel::toggleToolbar,
@@ -111,12 +120,9 @@ fun SessionScreen(
                 onRetry = { viewModel.connect(screenWidthPx, screenHeightPx) },
                 onBack = onDisconnected,
             )
-            SessionState.DISCONNECTED, SessionState.DISCONNECTING -> {
-                // Show nothing, waiting for connection or navigating away
-            }
+            SessionState.DISCONNECTED, SessionState.DISCONNECTING -> {}
         }
 
-        // Floating toolbar
         AnimatedVisibility(
             visible = toolbarVisible && sessionState == SessionState.CONNECTED,
             enter = slideInVertically { -it },
@@ -129,7 +135,7 @@ fun SessionScreen(
                     viewModel.disconnect()
                     onDisconnected()
                 },
-                onKeyboard = { /* TODO: Show soft keyboard */ },
+                onClipboard = { viewModel.syncLocalClipboard() },
                 onFullscreen = { viewModel.toggleToolbar() },
             )
         }
@@ -144,6 +150,12 @@ private fun RdpCanvas(
     val framebuffer by viewModel.framebuffer.collectAsStateWithLifecycle()
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+
+    // Hidden text field for keyboard input
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
+    var keyboardVisible by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -172,7 +184,7 @@ private fun RdpCanvas(
                 }
             }
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
+                detectDragGestures { change, _ ->
                     change.consume()
                     val rdpX = ((change.position.x - offset.x) / scale).toInt()
                     val rdpY = ((change.position.y - offset.y) / scale).toInt()
@@ -197,6 +209,34 @@ private fun RdpCanvas(
                 )
             }
         }
+
+        // Invisible text field for capturing keyboard/IME input
+        BasicTextField(
+            value = textFieldValue,
+            onValueChange = { newValue ->
+                val typed = newValue.text.removePrefix(textFieldValue.text)
+                if (typed.isNotEmpty()) {
+                    viewModel.onTextInput(typed)
+                }
+                textFieldValue = TextFieldValue("")
+            },
+            modifier = Modifier
+                .focusRequester(focusRequester)
+                .size(1.dp)
+                .align(Alignment.BottomCenter),
+            textStyle = TextStyle(fontSize = 1.sp, color = Color.Transparent),
+            cursorBrush = SolidColor(Color.Transparent),
+        )
+
+        // Toggle keyboard visibility
+        LaunchedEffect(keyboardVisible) {
+            if (keyboardVisible) {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            } else {
+                keyboardController?.hide()
+            }
+        }
     }
 }
 
@@ -204,7 +244,7 @@ private fun RdpCanvas(
 private fun SessionToolbar(
     hostname: String,
     onDisconnect: () -> Unit,
-    onKeyboard: () -> Unit,
+    onClipboard: () -> Unit,
     onFullscreen: () -> Unit,
 ) {
     Surface(
@@ -238,7 +278,16 @@ private fun SessionToolbar(
             )
 
             FilledTonalIconButton(
-                onClick = onKeyboard,
+                onClick = onClipboard,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(18.dp))
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            FilledTonalIconButton(
+                onClick = { /* keyboard toggle handled in RdpCanvas */ },
                 modifier = Modifier.size(36.dp),
                 colors = IconButtonDefaults.filledTonalIconButtonColors(),
             ) {
@@ -258,41 +307,67 @@ private fun SessionToolbar(
 }
 
 @Composable
-private fun ConnectingOverlay(hostname: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(48.dp),
-            )
-            Spacer(modifier = Modifier.padding(16.dp))
-            Text(
-                text = "Connecting to $hostname...",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
-            )
+private fun CertificateDialog(
+    certInfo: CertificateInfo,
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onReject,
+        title = {
+            Text(if (certInfo.hostMismatch) "Certificate Mismatch" else "Untrusted Certificate")
+        },
+        text = {
+            Column {
+                if (certInfo.hostMismatch) {
+                    Text(
+                        "The server certificate does not match the hostname.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                CertField("Host", certInfo.host)
+                CertField("Subject", certInfo.subject)
+                CertField("Issuer", certInfo.issuer)
+                CertField("Fingerprint", certInfo.fingerprint)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onAccept) { Text("Accept") }
+        },
+        dismissButton = {
+            TextButton(onClick = onReject) { Text("Reject", color = MaterialTheme.colorScheme.error) }
+        },
+    )
+}
+
+@Composable
+private fun CertField(label: String, value: String) {
+    if (value.isNotBlank()) {
+        Column(modifier = Modifier.padding(vertical = 2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
 @Composable
-private fun ErrorOverlay(
-    onRetry: () -> Unit,
-    onBack: () -> Unit,
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
+private fun ConnectingOverlay(hostname: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "Connection Failed",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
-            )
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+            Spacer(modifier = Modifier.padding(16.dp))
+            Text("Connecting to $hostname...", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+        }
+    }
+}
+
+@Composable
+private fun ErrorOverlay(onRetry: () -> Unit, onBack: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Connection Failed", style = MaterialTheme.typography.headlineMedium, color = Color.White)
             Spacer(modifier = Modifier.padding(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalIconButton(onClick = onBack) {
