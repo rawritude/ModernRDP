@@ -3,13 +3,16 @@ package com.modernrdp.ui.screens.editor
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.modernrdp.data.model.ConnectionGroup
 import com.modernrdp.data.model.RdpConnection
 import com.modernrdp.data.model.ResolutionMode
 import com.modernrdp.data.repository.ConnectionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +29,9 @@ class EditorViewModel @Inject constructor(
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
+    val availableGroups: StateFlow<List<ConnectionGroup>> = repository.getAllGroups()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     init {
         if (isEditing) {
             viewModelScope.launch {
@@ -37,6 +43,7 @@ class EditorViewModel @Inject constructor(
                         username = conn.username,
                         password = conn.password,
                         domain = conn.domain,
+                        groupId = conn.groupId,
                         resolutionMode = conn.resolutionMode,
                         customWidth = conn.customWidth.toString(),
                         customHeight = conn.customHeight.toString(),
@@ -61,6 +68,7 @@ class EditorViewModel @Inject constructor(
     fun updateUsername(value: String) = _state.update { it.copy(username = value) }
     fun updatePassword(value: String) = _state.update { it.copy(password = value) }
     fun updateDomain(value: String) = _state.update { it.copy(domain = value) }
+    fun updateGroupId(value: Long?) = _state.update { it.copy(groupId = value) }
     fun updateResolutionMode(value: ResolutionMode) = _state.update { it.copy(resolutionMode = value) }
     fun updateCustomWidth(value: String) = _state.update { it.copy(customWidth = value) }
     fun updateCustomHeight(value: String) = _state.update { it.copy(customHeight = value) }
@@ -90,6 +98,7 @@ class EditorViewModel @Inject constructor(
                 username = s.username,
                 password = s.password,
                 domain = s.domain,
+                groupId = s.groupId,
                 resolutionMode = s.resolutionMode,
                 customWidth = s.customWidth.toIntOrNull() ?: 1920,
                 customHeight = s.customHeight.toIntOrNull() ?: 1080,
@@ -127,6 +136,7 @@ data class EditorState(
     val username: String = "",
     val password: String = "",
     val domain: String = "",
+    val groupId: Long? = null,
     val resolutionMode: ResolutionMode = ResolutionMode.MATCH_DEVICE,
     val customWidth: String = "1920",
     val customHeight: String = "1080",

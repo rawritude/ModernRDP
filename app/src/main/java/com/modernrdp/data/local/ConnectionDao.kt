@@ -14,6 +14,12 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections ORDER BY lastConnected DESC, createdAt DESC")
     fun getAllConnections(): Flow<List<RdpConnection>>
 
+    @Query("SELECT * FROM connections WHERE groupId = :groupId ORDER BY lastConnected DESC, createdAt DESC")
+    fun getConnectionsByGroup(groupId: Long): Flow<List<RdpConnection>>
+
+    @Query("SELECT * FROM connections WHERE groupId IS NULL ORDER BY lastConnected DESC, createdAt DESC")
+    fun getUngroupedConnections(): Flow<List<RdpConnection>>
+
     @Query("SELECT * FROM connections WHERE id = :id")
     suspend fun getConnectionById(id: Long): RdpConnection?
 
@@ -28,4 +34,7 @@ interface ConnectionDao {
 
     @Query("UPDATE connections SET lastConnected = :timestamp WHERE id = :id")
     suspend fun updateLastConnected(id: Long, timestamp: Long)
+
+    @Query("UPDATE connections SET groupId = :groupId WHERE id = :connectionId")
+    suspend fun moveToGroup(connectionId: Long, groupId: Long?)
 }

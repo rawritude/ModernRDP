@@ -17,12 +17,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -57,6 +61,7 @@ fun ConnectionEditorScreen(
     viewModel: EditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val groups by viewModel.availableGroups.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -155,6 +160,14 @@ fun ConnectionEditorScreen(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Next,
                     ),
+                )
+            }
+
+            if (groups.isNotEmpty()) {
+                GroupPicker(
+                    selectedGroupId = state.groupId,
+                    groups = groups,
+                    onGroupSelected = viewModel::updateGroupId,
                 )
             }
 
@@ -333,6 +346,54 @@ private fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupPicker(
+    selectedGroupId: Long?,
+    groups: List<com.modernrdp.data.model.ConnectionGroup>,
+    onGroupSelected: (Long?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedName = groups.find { it.id == selectedGroupId }?.name ?: "None"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = selectedName,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Group") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("None") },
+                onClick = {
+                    onGroupSelected(null)
+                    expanded = false
+                },
+            )
+            groups.forEach { group ->
+                DropdownMenuItem(
+                    text = { Text(group.name) },
+                    onClick = {
+                        onGroupSelected(group.id)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable

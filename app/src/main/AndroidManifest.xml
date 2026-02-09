@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".ModernRdpApp"
@@ -32,6 +35,12 @@
                 <data android:mimeType="application/x-rdp" />
             </intent-filter>
         </activity>
+
+        <!-- RDP session foreground service -->
+        <service
+            android:name=".service.RdpSessionService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
 
         <!-- Declare support for foldable postures -->
         <property
