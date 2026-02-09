@@ -1,5 +1,6 @@
 package com.modernrdp.ui.screens.session
 
+import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -19,6 +20,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SessionViewModel @Inject constructor(
+    private val application: Application,
     private val repository: ConnectionRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -36,6 +38,9 @@ class SessionViewModel @Inject constructor(
     val framebuffer: StateFlow<Bitmap?> = rdpBridge.framebuffer
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val errorMessage: StateFlow<String?> = rdpBridge.errorMessage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     private val _toolbarVisible = MutableStateFlow(true)
     val toolbarVisible: StateFlow<Boolean> = _toolbarVisible.asStateFlow()
 
@@ -48,14 +53,10 @@ class SessionViewModel @Inject constructor(
     fun connect(screenWidth: Int, screenHeight: Int) {
         val conn = _connection.value ?: return
         viewModelScope.launch {
-            rdpBridge.initialize()
+            rdpBridge.initialize(application)
             rdpBridge.connect(conn, screenWidth, screenHeight)
             repository.markConnected(connectionId)
         }
-    }
-
-    fun onScreenResize(width: Int, height: Int) {
-        rdpBridge.resize(width, height)
     }
 
     fun onTouchEvent(x: Int, y: Int, flags: Int) {
@@ -64,6 +65,14 @@ class SessionViewModel @Inject constructor(
 
     fun onKeyEvent(keyCode: Int, down: Boolean) {
         rdpBridge.sendKeyEvent(keyCode, down)
+    }
+
+    fun onUnicodeKey(code: Int, down: Boolean) {
+        rdpBridge.sendUnicodeKey(code, down)
+    }
+
+    fun sendClipboard(text: String) {
+        rdpBridge.sendClipboardData(text)
     }
 
     fun toggleToolbar() {
