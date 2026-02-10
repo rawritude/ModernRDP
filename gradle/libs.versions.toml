@@ -16,6 +16,11 @@ datastore = "1.1.1"
 coroutines = "1.9.0"
 material3Adaptive = "1.1.0"
 biometric = "1.1.0"
+junit = "4.13.2"
+mockk = "1.13.13"
+turbine = "1.2.0"
+archCoreTesting = "2.2.0"
+robolectric = "4.14.1"
 
 [libraries]
 # Core
@@ -67,6 +72,16 @@ androidx-biometric = { group = "androidx.biometric", name = "biometric", version
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Testing
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+androidx-arch-core-testing = { group = "androidx.arch.core", name = "core-testing", version.ref = "archCoreTesting" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Bridge to FreeRDP native library (libmodernrdp-native.so).
@@ -24,6 +25,18 @@ class FreeRdpBridge {
 
     private val _framebuffer = MutableStateFlow<Bitmap?>(null)
     val framebuffer: StateFlow<Bitmap?> = _framebuffer.asStateFlow()
+
+    /**
+     * Increments on every graphics update. Observe this to know when to redraw,
+     * since the Bitmap reference stays the same and StateFlow.distinctUntilChanged
+     * would swallow repeated emissions of the same Bitmap object.
+     */
+    private val _frameVersion = MutableStateFlow(0L)
+    val frameVersion: StateFlow<Long> = _frameVersion.asStateFlow()
+
+    /** Frame throttling: minimum interval between frame emissions (ns). ~60fps = 16ms */
+    private val frameIntervalNs = 16_000_000L
+    private var lastFrameTimeNs = AtomicLong(0L)
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -163,7 +176,25 @@ class FreeRdpBridge {
         val bitmap = sessionBitmap ?: return
         if (nativeInstance == 0L) return
         nativeUpdateGraphics(nativeInstance, bitmap, x, y, width, height)
+
+        // Throttle frame emissions to ~60fps to avoid excessive recomposition.
+        // The bitmap pixels are updated in-place above; we just need to signal
+        // the UI to redraw by bumping the frame version counter.
+        val now = System.nanoTime()
+        val last = lastFrameTimeNs.get()
+        if (now - last >= frameIntervalNs) {
+            lastFrameTimeNs.set(now)
+            _framebuffer.value = bitmap
+            _frameVersion.value++
+        }
+    }
+
+    /** Force a frame emission (e.g., after a resize). Bypasses throttle. */
+    fun forceFrame() {
+        val bitmap = sessionBitmap ?: return
+        lastFrameTimeNs.set(System.nanoTime())
         _framebuffer.value = bitmap
+        _frameVersion.value++
     }
 
     fun sendMouseEvent(x: Int, y: Int, flags: Int) {
@@ -328,6 +359,8 @@ class FreeRdpBridge {
         fun onNativeGraphicsResize(instance: Long, width: Int, height: Int, bpp: Int) {
             Log.i(TAG, "onNativeGraphicsResize: ${width}x${height} @${bpp}bpp")
             onNativeSettingsChanged(instance, width, height, bpp)
+            // Force immediate frame emission after resize (bypass throttle)
+            getBridge(instance)?.forceFrame()
         }
 
         @JvmStatic

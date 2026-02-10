@@ -5,6 +5,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -23,16 +25,20 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -77,12 +84,25 @@ fun SessionScreen(
     val connection by viewModel.connection.collectAsStateWithLifecycle()
     val toolbarVisible by viewModel.toolbarVisible.collectAsStateWithLifecycle()
     val pendingCert by viewModel.pendingCertificate.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val retryCount by viewModel.retryCount.collectAsStateWithLifecycle()
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
 
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Collect one-shot UI events
+    LaunchedEffect(Unit) {
+        viewModel.uiEvent.collect { event ->
+            when (event) {
+                is UiEvent.ShowSnackbar -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
+    }
 
     LaunchedEffect(connection) {
         if (connection != null && sessionState == SessionState.DISCONNECTED) {
@@ -111,13 +131,18 @@ fun SessionScreen(
             .background(Color.Black),
     ) {
         when (sessionState) {
-            SessionState.CONNECTING -> ConnectingOverlay(hostname = connection?.hostname ?: "")
+            SessionState.CONNECTING -> ConnectingOverlay(
+                hostname = connection?.hostname ?: "",
+                retryCount = retryCount,
+            )
             SessionState.CONNECTED -> RdpCanvas(
                 viewModel = viewModel,
                 onToggleToolbar = viewModel::toggleToolbar,
             )
             SessionState.ERROR -> ErrorOverlay(
-                onRetry = { viewModel.connect(screenWidthPx, screenHeightPx) },
+                errorMessage = errorMessage,
+                retryCount = retryCount,
+                onRetry = { viewModel.retry(screenWidthPx, screenHeightPx) },
                 onBack = onDisconnected,
             )
             SessionState.DISCONNECTED, SessionState.DISCONNECTING -> {}
@@ -136,7 +161,21 @@ fun SessionScreen(
                     onDisconnected()
                 },
                 onClipboard = { viewModel.syncLocalClipboard() },
+                onKeyboard = { viewModel.toggleKeyboard() },
+                onResetZoom = null, // Reset handled in canvas
                 onFullscreen = { viewModel.toggleToolbar() },
+            )
+        }
+
+        // Snackbar for feedback
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) { data ->
+            Snackbar(
+                snackbarData = data,
+                containerColor = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
             )
         }
     }
@@ -148,6 +187,9 @@ private fun RdpCanvas(
     onToggleToolbar: () -> Unit,
 ) {
     val framebuffer by viewModel.framebuffer.collectAsStateWithLifecycle()
+    // Observe frame version to trigger recomposition when bitmap pixels change in-place
+    val frameVersion by viewModel.frameVersion.collectAsStateWithLifecycle()
+    val keyboardVisible by viewModel.keyboardVisible.collectAsStateWithLifecycle()
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
@@ -155,16 +197,16 @@ private fun RdpCanvas(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
-    var keyboardVisible by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Tap gestures: single tap = click, double tap = toggle toolbar, long press = right click
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { pos ->
-                        val rdpX = ((pos.x - offset.x) / scale).toInt()
-                        val rdpY = ((pos.y - offset.y) / scale).toInt()
+                        val rdpX = ((pos.x - offset.x) / scale).toInt().coerceAtLeast(0)
+                        val rdpY = ((pos.y - offset.y) / scale).toInt().coerceAtLeast(0)
                         viewModel.onTouchEvent(
                             rdpX, rdpY,
                             FreeRdpBridge.MOUSE_FLAG_BUTTON1 or FreeRdpBridge.MOUSE_FLAG_DOWN,
@@ -172,27 +214,65 @@ private fun RdpCanvas(
                         viewModel.onTouchEvent(rdpX, rdpY, FreeRdpBridge.MOUSE_FLAG_BUTTON1)
                     },
                     onDoubleTap = { onToggleToolbar() },
+                    onLongPress = { pos ->
+                        // Long press = right click
+                        val rdpX = ((pos.x - offset.x) / scale).toInt().coerceAtLeast(0)
+                        val rdpY = ((pos.y - offset.y) / scale).toInt().coerceAtLeast(0)
+                        viewModel.onTouchEvent(
+                            rdpX, rdpY,
+                            FreeRdpBridge.MOUSE_FLAG_BUTTON2 or FreeRdpBridge.MOUSE_FLAG_DOWN,
+                        )
+                        viewModel.onTouchEvent(rdpX, rdpY, FreeRdpBridge.MOUSE_FLAG_BUTTON2)
+                    },
                 )
             }
+            // Pinch-to-zoom and two-finger pan
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(0.5f, 3f)
+                    val newScale = (scale * zoom).coerceIn(0.25f, 5f)
+                    // Adjust offset to zoom toward the center of the gesture
+                    val scaleFactor = newScale / scale
                     offset = Offset(
-                        x = offset.x + pan.x,
-                        y = offset.y + pan.y,
+                        x = offset.x * scaleFactor + pan.x,
+                        y = offset.y * scaleFactor + pan.y,
                     )
+                    scale = newScale
                 }
             }
+            // Single-finger drag = mouse move
             .pointerInput(Unit) {
                 detectDragGestures { change, _ ->
                     change.consume()
-                    val rdpX = ((change.position.x - offset.x) / scale).toInt()
-                    val rdpY = ((change.position.y - offset.y) / scale).toInt()
+                    val rdpX = ((change.position.x - offset.x) / scale).toInt().coerceAtLeast(0)
+                    val rdpY = ((change.position.y - offset.y) / scale).toInt().coerceAtLeast(0)
                     viewModel.onTouchEvent(rdpX, rdpY, FreeRdpBridge.MOUSE_FLAG_MOVE)
+                }
+            }
+            // Scroll wheel via pointer scroll events
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val event = awaitFirstDown(requireUnconsumed = false)
+                    event.consume()
+                    while (true) {
+                        val pointerEvent = awaitPointerEvent()
+                        if (pointerEvent.type == PointerEventType.Scroll) {
+                            val scrollDelta = pointerEvent.changes.firstOrNull()?.scrollDelta
+                            if (scrollDelta != null && scrollDelta.y != 0f) {
+                                viewModel.onScrollWheel(-scrollDelta.y)
+                            }
+                            pointerEvent.changes.forEach { it.consume() }
+                        }
+                    }
                 }
             },
     ) {
         framebuffer?.let { bitmap ->
+            // Reading frameVersion forces recomposition when bitmap pixels update in-place.
+            // Without this, StateFlow.distinctUntilChanged would skip emissions of the
+            // same Bitmap reference, even though its pixel contents have changed.
+            @Suppress("UNUSED_EXPRESSION")
+            frameVersion
+
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -245,6 +325,8 @@ private fun SessionToolbar(
     hostname: String,
     onDisconnect: () -> Unit,
     onClipboard: () -> Unit,
+    onKeyboard: () -> Unit,
+    onResetZoom: (() -> Unit)?,
     onFullscreen: () -> Unit,
 ) {
     Surface(
@@ -287,11 +369,21 @@ private fun SessionToolbar(
             Spacer(modifier = Modifier.width(4.dp))
 
             FilledTonalIconButton(
-                onClick = { /* keyboard toggle handled in RdpCanvas */ },
+                onClick = onKeyboard,
                 modifier = Modifier.size(36.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(),
             ) {
                 Icon(Icons.Default.Keyboard, contentDescription = "Keyboard", modifier = Modifier.size(18.dp))
+            }
+
+            if (onResetZoom != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+
+                FilledTonalIconButton(
+                    onClick = onResetZoom,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(Icons.Default.FitScreen, contentDescription = "Reset zoom", modifier = Modifier.size(18.dp))
+                }
             }
 
             Spacer(modifier = Modifier.width(4.dp))
@@ -353,28 +445,80 @@ private fun CertField(label: String, value: String) {
 }
 
 @Composable
-private fun ConnectingOverlay(hostname: String) {
+private fun ConnectingOverlay(hostname: String, retryCount: Int) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
-            Spacer(modifier = Modifier.padding(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Text("Connecting to $hostname...", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+            if (retryCount > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Retry attempt $retryCount",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ErrorOverlay(onRetry: () -> Unit, onBack: () -> Unit) {
+private fun ErrorOverlay(
+    errorMessage: String?,
+    retryCount: Int,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Connection Failed", style = MaterialTheme.typography.headlineMedium, color = Color.White)
-            Spacer(modifier = Modifier.padding(8.dp))
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp),
+        ) {
+            Text(
+                "Connection Failed",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White,
+            )
+
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.8f),
+                )
+            }
+
+            if (retryCount > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Failed after $retryCount retries",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalIconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                FilledTonalButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Back")
                 }
-                FilledTonalIconButton(onClick = onRetry) {
-                    Icon(Icons.Default.ZoomIn, contentDescription = "Retry")
+                FilledTonalButton(onClick = onRetry) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Retry")
                 }
             }
         }
