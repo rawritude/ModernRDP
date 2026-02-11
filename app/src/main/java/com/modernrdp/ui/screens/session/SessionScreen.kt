@@ -94,6 +94,27 @@ fun SessionScreen(
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var showDisconnectConfirm by remember { mutableStateOf(false) }
+    val confirmDisconnect by viewModel.confirmDisconnect.collectAsStateWithLifecycle()
+
+    // Disconnect confirmation dialog
+    if (showDisconnectConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDisconnectConfirm = false },
+            title = { Text("Disconnect?") },
+            text = { Text("Are you sure you want to disconnect from ${connection?.hostname ?: "this server"}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDisconnectConfirm = false
+                    viewModel.disconnect()
+                    onDisconnected()
+                }) { Text("Disconnect", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisconnectConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     // Collect one-shot UI events
     LaunchedEffect(Unit) {
@@ -157,8 +178,12 @@ fun SessionScreen(
             SessionToolbar(
                 hostname = connection?.hostname ?: "",
                 onDisconnect = {
-                    viewModel.disconnect()
-                    onDisconnected()
+                    if (confirmDisconnect) {
+                        showDisconnectConfirm = true
+                    } else {
+                        viewModel.disconnect()
+                        onDisconnected()
+                    }
                 },
                 onClipboard = { viewModel.syncLocalClipboard() },
                 onKeyboard = { viewModel.toggleKeyboard() },

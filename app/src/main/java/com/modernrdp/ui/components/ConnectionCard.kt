@@ -1,5 +1,6 @@
 package com.modernrdp.ui.components
 
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,18 +15,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Power
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.modernrdp.data.model.RdpConnection
+import com.modernrdp.util.WakeOnLan
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -38,6 +47,9 @@ fun ConnectionCard(
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -100,6 +112,33 @@ fun ConnectionCard(
             }
 
             Spacer(modifier = Modifier.width(8.dp))
+
+            // Wake-on-LAN button (only shown when MAC address is configured)
+            if (connection.macAddress.isNotBlank() && WakeOnLan.isValidMac(connection.macAddress)) {
+                FilledTonalIconButton(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    WakeOnLan.send(connection.macAddress, connection.hostname)
+                                }
+                                Toast.makeText(context, "WoL packet sent", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "WoL failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Power,
+                        contentDescription = "Wake on LAN",
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+            }
 
             FilledTonalIconButton(onClick = onConnect) {
                 Icon(

@@ -80,6 +80,9 @@ class SessionViewModel @Inject constructor(
     private val _keyboardVisible = MutableStateFlow(false)
     val keyboardVisible: StateFlow<Boolean> = _keyboardVisible.asStateFlow()
 
+    val confirmDisconnect: StateFlow<Boolean> = prefs.confirmDisconnect
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     private val clipboardManager =
         application.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.ModernRDP" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Splash screen theme applied before Compose takes over -->
+    <style name="Theme.ModernRDP.Splash" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#E3F2FD</item>
+        <item name="android:statusBarColor">#1565C0</item>
+        <item name="android:navigationBarColor">#E3F2FD</item>
+    </style>
 </resources>

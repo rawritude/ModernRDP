@@ -4,21 +4,38 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Monitor outline -->
+    <!-- Background circle -->
     <path
         android:fillColor="#1565C0"
-        android:pathData="M30,30h48v32H30z" />
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0" />
+    <!-- Monitor body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M33,33h42v26H33z" />
-    <!-- Stand -->
+        android:pathData="M32,32h44v30H32z" />
+    <!-- Screen area -->
     <path
-        android:fillColor="#1565C0"
-        android:pathData="M48,62h12v4H48zM44,66h20v3H44z" />
-    <!-- Signal lines -->
+        android:fillColor="#0D47A1"
+        android:pathData="M35,35h38v24H35z" />
+    <!-- Screen content: remote cursor -->
     <path
+        android:fillColor="#64B5F6"
+        android:pathData="M48,41l8,12l-3.5,0l2.5,5l-3,1.5l-2.5,-5l-2.5,2.5z" />
+    <!-- Monitor stand -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,62h12v3H48z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,65h20v2H44z" />
+    <!-- WiFi/signal arcs (right side) -->
+    <path
+        android:fillColor="@android:color/transparent"
         android:strokeColor="#42A5F5"
         android:strokeWidth="2"
-        android:pathData="M70,40 L78,36M70,46 L78,46M70,52 L78,56"
-        android:fillColor="#00000000" />
+        android:pathData="M72,42a6,6 0,0 1,0 8" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#42A5F5"
+        android:strokeWidth="2"
+        android:pathData="M76,38a12,12 0,0 1,0 16" />
 </vector>

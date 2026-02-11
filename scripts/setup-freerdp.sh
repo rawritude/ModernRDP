@@ -160,11 +160,75 @@ EOF
 }
 
 # -------------------------------------------------------------------
+# Option C: Verify that libraries are in place
+# -------------------------------------------------------------------
+verify_libs() {
+    local REQUIRED_LIBS="libfreerdp3.so libfreerdp-client3.so libwinpr3.so libssl.so libcrypto.so"
+    local all_ok=true
+
+    info "Verifying FreeRDP native libraries..."
+    echo ""
+
+    for abi in $ABIS; do
+        local abi_dir="$JNILIBS_DIR/$abi"
+        local abi_ok=true
+
+        if [ ! -d "$abi_dir" ]; then
+            echo -e "  ${RED}MISSING${NC}  $abi: directory not found ($abi_dir)"
+            all_ok=false
+            continue
+        fi
+
+        for lib in $REQUIRED_LIBS; do
+            if [ -f "$abi_dir/$lib" ]; then
+                local size
+                size=$(stat -c%s "$abi_dir/$lib" 2>/dev/null || stat -f%z "$abi_dir/$lib" 2>/dev/null)
+                echo -e "  ${GREEN}OK${NC}  $abi/$lib ($size bytes)"
+            else
+                echo -e "  ${RED}MISSING${NC}  $abi/$lib"
+                abi_ok=false
+                all_ok=false
+            fi
+        done
+
+        # Check optional headers
+        if [ -d "$abi_dir/include/freerdp3" ]; then
+            echo -e "  ${GREEN}OK${NC}  $abi/include/freerdp3/"
+        else
+            echo -e "  ${YELLOW}WARN${NC}  $abi/include/freerdp3/ (needed for compilation)"
+        fi
+
+        echo ""
+    done
+
+    if $all_ok; then
+        info "All required libraries are present!"
+        info "You can build the project with: ./gradlew assembleDebug"
+    else
+        warn "Some libraries are missing. Run:"
+        warn "  ./scripts/setup-freerdp.sh --build   (build from source)"
+        warn "  Or manually place .so files in app/src/main/jniLibs/<abi>/"
+        exit 1
+    fi
+}
+
+# -------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------
 case "${1:-}" in
     --build)
         build_from_source
+        ;;
+    --verify)
+        verify_libs
+        ;;
+    -h|--help)
+        echo "Usage: $0 [--build|--verify]"
+        echo ""
+        echo "  (no args)  Create placeholder directory structure with READMEs"
+        echo "  --build    Build FreeRDP from source (requires NDK)"
+        echo "  --verify   Verify that required .so files are in place"
+        echo "  --help     Show this help"
         ;;
     *)
         create_placeholder
